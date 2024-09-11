@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "repl-nix-probot"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pronotepy = "2.13.1"
+pyzbar = "0.1.9"
+selenium = "4.24.0"
+pillow-pil = "0.1dev"
+discord-py = "2.4.0"
+apscheduler = "3.10.4"
+pytz = "^2024.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
