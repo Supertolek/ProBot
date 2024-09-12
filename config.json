@@ -1,0 +1,30 @@
+{
+    "subjects": {
+        "FRANCAIS": 1280869011306975262,
+        "MATHEMATIQUES": 1280869146598445169,
+        "PHYSIQUE-CHIMIE": 1280869206526787584,
+        "NUMERIQUE SC.INFORM.": 1280869270548643974,
+        "HISTOIRE-GEOGRAPHIE": 1280869301997273118,
+        "ANGLAIS LV1": 1280869341872525353,
+        "ESPAGNOL LV2": 1280869528678699052,
+        "ALLEMAND LV2": 1280869567094198332,
+        "ENS. SCIENT. SVT": 1280869612753522762,
+        "ENS. SCIENT. PC": 1280869612753522762,
+        "ED MORALE ET CIVIQUE": 1280869634169634867,
+        "CINEMA-AUDIOVISUEL": 1280869661143076978
+    },
+    "homework_check": {
+        "static_update_hours": [
+            "13:10:00",
+            "15:05:00",
+            "17:20:00",
+            "18:15:00"
+        ],
+        "repetitive_update_start": "18:15:00",
+        "repetitive_update_end": "22:15:00",
+        "repetitive_update_steps": [
+            "15",
+            "45"
+        ]
+    }
+}
