@@ -10,24 +10,11 @@ import datetime
 import pytz
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from homeworks_wrapper import compare_homeworks
 from id_wrapper import allready_registered, save_user, get_user, get_all_users
 import hashlib
 from homeworks_wrapper import compare_stored_homeworks, get_stored_homeworks_hash
 
-# scheduler = AsyncIOScheduler()
-
-# def reload_scheduler():
-#     first_update = datetime.datetime.now().strftime("%Y-%m-%d 15:00:00")
-#     second_update = datetime.datetime.now().strftime("%Y-%m-%d 17:00:00")
-#     third_update = datetime.datetime.now().strftime("%Y-%m-%d 18:00:00")
-#     final_update = datetime.datetime.now().strftime("%Y-%m-%d 22:00:00")
-#     scheduler.add_job(update_all_homeworks, "date", run_date=first_update, timezone=pytz.timezone("Europe/Paris"))
-#     scheduler.add_job(update_all_homeworks, "date", run_date=second_update, timezone=pytz.timezone("Europe/Paris"))
-#     scheduler.add_job(update_all_homeworks, "date", run_date=third_update, timezone=pytz.timezone("Europe/Paris"))
-#     scheduler.add_job(update_all_homeworks, "cron", hour="18-21", minute="0,19", timezone=pytz.timezone("Europe/Paris"))
-#     scheduler.add_job(reload_scheduler, "date", run_date=final_update, timezone=pytz.timezone("Europe/Paris"))
-#     scheduler.start()
+scheduler = AsyncIOScheduler()
 
 config = json.load(open("config.json"))
 
@@ -35,6 +22,29 @@ bot = commands.Bot(command_prefix="/", intents=discord.Intents.all())
 
 users: dict[str, pronotepy.Client] = {}
 failed_connection = []
+
+def reload_scheduler():
+    # Configure toutes les horaires d'actualisation fixes
+    for update in config["homework_check"]["static_update_hours"]:
+        run_date = datetime.datetime.now().strftime("%Y-%m-%d 15:00:00")
+        scheduler.add_job(
+            update_homeworks,
+            "date",
+            run_date=run_date,
+            timezone=pytz.timezone("Europe/Paris"))
+    # Configure les actualisations périodiques (ex: toutes les 30 minutes)
+    scheduler.add_job(
+        update_homeworks,
+        "cron",
+        hour=f"{config["homework_check"]["repetitive_update_start"]}-{config["homework_check"]["repetitive_update_end"]}",
+        minute=",".join(config["homework_check"]["repetitive_update_step"]),
+        timezone=pytz.timezone("Europe/Paris"))
+    scheduler.add_job(
+        reload_scheduler,
+        "date",
+        run_date=config["homework_check"]["repetitive_update_end"],
+        timezone=pytz.timezone("Europe/Paris"))
+    scheduler.start()
 
 @bot.event
 async def on_ready():
@@ -59,6 +69,7 @@ async def on_ready():
         print(f"Synced {len(synced)} command(s).")
     except Exception as e:
         print(e)
+    reload_scheduler()
 
 
 @bot.tree.command(name="link", description="Relie ton compte pronote.")
