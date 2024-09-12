@@ -111,5 +111,5 @@ def connection_to_pronotepy(username: str,
 
     return client
 
-def connection_with_qr_code(file_name,verif_code: str = "0000") -> pronotepy.Client | None:
+def connection_with_qr_code(file_name: str, verif_code: str = "0000") -> pronotepy.Client | None:
     image = Image.open(file_name)

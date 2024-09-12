@@ -1,14 +1,12 @@
 import os
 import json
 import discord
-from discord import ForumChannel, app_commands, message
+from discord import ForumChannel
 from discord.ext import commands
 import pronotepy
-from pronoteAPI_connection import connection_to_pronotepy
-from pronoteAPI_utils import get_homeworks
+from pronoteAPI_connection import connection_to_pronotepy, connection_with_qr_code
 import datetime
 import pytz
-import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from id_wrapper import allready_registered, save_user, get_user, get_all_users
 import hashlib
@@ -73,11 +71,19 @@ async def on_ready():
 
 
 @bot.tree.command(name="link", description="Relie ton compte pronote.")
-async def link_command(interaction: discord.Interaction):
-    await link_command_callback(interaction)
+async def link_command(interaction: discord.Interaction, image: discord.Attachment, verification_code: str):
+    await interaction.response.send_message(f"<@{interaction.user.id}>: Connection en cours à Pronote...")
+    original_response = await interaction.original_response()
+    connection_status = connection_with_qr_code(image.url, verif_code=verification_code)
+    # Vérifie si la connexion a réussi
+    if connection_status:
+        users[str(interaction.user.id)] = connection_status
+        await original_response.edit(content=f"<@{interaction.user.id}>: Connection réussie!")
+    else:
+        await original_response.edit(content=f"<@{interaction.user.id}>: Une erreur est survenue lors de la connexion.")
 
 
-async def link_command_callback(interaction: discord.Interaction):
+async def _link_command_callback(interaction: discord.Interaction):
     class Popup(discord.ui.Modal, title="Connectez-vous à Pronote."):
         username = discord.ui.TextInput(label="Nom d'utilisateur",
                                         style=discord.TextStyle.short,
@@ -108,13 +114,13 @@ async def link_command_callback(interaction: discord.Interaction):
             if client is None:
                 button = discord.ui.Button(label="Réessayer",
                                            style=discord.ButtonStyle.primary)
-                button.callback = link_command_callback
+                button.callback = _link_command_callback
                 view = discord.ui.View()
                 view.add_item(button)
                 await message.edit(
                     content="Identifiant ou Mot de passe incorrect.",
                     view=view)
-                await link_command_callback(interaction)
+                await _link_command_callback(interaction)
                 return
             else:
                 users[str(interaction.user.id)] = client
@@ -143,11 +149,9 @@ async def info_command(interaction: discord.Interaction):
 
 
 
-@bot.event
-async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-    if after.channel and after.channel.id == 1282706897316876298:
-        await member.move_to(before.channel)
-        await update_homeworks(member.id)
+@bot.tree.command(name="homeworks", description="Met à jour les devoirs.")
+async def update_homeworks_command(interaction: discord.Interaction):
+    await update_homeworks(interaction.user.id)
 
 
 async def update_homeworks(users_id: list[int]|int|None=None):
@@ -224,92 +228,5 @@ async def update_homeworks(users_id: list[int]|int|None=None):
                         mention_message = await generated_thread.thread.send("Élèves concernés:")
                         await mention_message.edit(content=f"Élèves concernés:\n<@{user_id}>")
                     
-
-
-async def _update_homeworks(member_id: int, ping_if_not_done: bool=True):
-    forum_ids = config["subjects"]
-    forum_channels = {
-        subject_name: bot.get_channel(int(channel_id))
-        for subject_name, channel_id
-        in forum_ids.items()}
-    forum_channels_good = {
-        subject_name: channel
-        for subject_name, channel
-        in forum_channels.items()
-        if isinstance(channel, ForumChannel)
-    }
-    forum_channels_threads = {} # "subject": {"thread_title": ["thread", "history"]}
-    for subject_name, forum_channel in forum_channels_good.items():
-        forum_channel_threads = {} # "thread_title": ["thread", "history"]
-        for forum_channel_thread in forum_channel.threads:
-            if forum_channel_thread.owner_id == 1281282866080120914:
-                thread_history = forum_channel_thread.history(limit=2, oldest_first=True)
-                thread_first_message = await thread_history.__anext__()
-                forum_channel_threads[thread_first_message.content] = [forum_channel_thread, thread_history]
-        forum_channels_threads[subject_name] = forum_channel_threads
-
-    client = users["961697282149990430"] # Bastien
-    client = users[str(member_id)]
-    homeworks = client.homework(datetime.date.today())
-    for homework in homeworks:
-        subject = homework.subject.name
-        description = homework.description
-        thread_name = f"{homework.date}: Devoir de {subject.capitalize()}"
-        thread_description = f"**Devoir de {subject.capitalize()}**\n{description}\n*{homework.date}*"
-        if homework.files:
-            thread_description += f"\n*Fichiers:*\n{"\n".join([f"[{file.name}]({file.url})" for file in homework.files])}"
-        if thread_description not in forum_channels_threads[subject]:
-            generated_thread = await forum_channels_good[subject].create_thread(
-                name=thread_name,
-                content=thread_description)
-            forum_channels_threads[subject][thread_name] = [generated_thread.thread, generated_thread.thread.history(limit=2, oldest_first=True)]
-            if not homework.done:
-                await generated_thread.thread.send(f"Élèves concernés:\n<@{member_id}>", silent=True)
-            else:
-                mention_message = await generated_thread.thread.send("Élèves concernés:", silent=True)
-                await mention_message.edit(content=mention_message.content + f"\n<@{member_id}>")
-        else:
-            (subject_thread, subject_thread_history) = forum_channels_threads[subject][thread_description]
-            first_message = await subject_thread_history.__anext__()
-            if f"<@{member_id}>" not in first_message.content:
-                await first_message.edit(content = f"{first_message.content}\n<@{member_id}>")
-            if not homework.done:
-                await subject_thread.send(f"<@{member_id}>")
-
-@bot.tree.command(name="link²", description="Relie ton compte pronote.")
-async def _link_command(interaction: discord.Interaction, username: str,
-                        password: str):
-    await interaction.response.send_message("Connection à pronote en cours...")
-    message = await interaction.original_response()
-
-    client = connection_to_pronotepy(username, password)
-    if client is None:
-        await message.edit(content="Identifiant ou Mot de passe incorrect.")
-        return
-    else:
-        await message.edit(content="Connection réussie !")
-        save_user(username, client.pronote_url, client.username,
-                  client.password, client.uuid)
-        date = datetime.date.today()
-        homeworks = client.homework(date)
-
-        if not homeworks:
-            await message.edit(
-                content=f"{interaction.user.mention}, aucun devoir trouvé.")
-            return
-
-        embeds = []
-        for homework in homeworks:
-            embed = discord.Embed(
-                title=f"Devoir de {homework.subject.name}",
-                description=
-                f"A rendre pour le {homework.date.strftime('%d/%m/%Y')}",
-                color=discord.Color.from_str(homework.background_color))
-            embed.add_field(name="Description",
-                            value=homework.description,
-                            inline=False)
-            embeds.append(embed)
-        await message.edit(embeds=embeds)
-
 
 bot.run(os.environ["DISCORD_TOKEN"])
