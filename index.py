@@ -10,7 +10,7 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from id_wrapper import allready_registered, save_user, get_user, get_all_users
 import hashlib
-from homeworks_wrapper import compare_stored_homeworks, get_stored_homeworks_hash
+from homeworks_wrapper import compare_stored_homeworks, get_stored_homeworks_hash, store_homeworks_hash
 
 scheduler = AsyncIOScheduler()
 
@@ -24,7 +24,7 @@ failed_connection = []
 def reload_scheduler():
     # Configure toutes les horaires d'actualisation fixes
     for update in config["homework_check"]["static_update_hours"]:
-        run_date = datetime.datetime.now().strftime("%Y-%m-%d 15:00:00")
+        run_date = datetime.datetime.now().strftime(f"%Y-%m-%d {update}")
         scheduler.add_job(
             update_homeworks,
             "date",
@@ -35,12 +35,13 @@ def reload_scheduler():
         update_homeworks,
         "cron",
         hour=f"{config["homework_check"]["repetitive_update_start"]}-{config["homework_check"]["repetitive_update_end"]}",
-        minute=",".join(config["homework_check"]["repetitive_update_step"]),
+        minute=",".join(config["homework_check"]["repetitive_update_steps"]),
         timezone=pytz.timezone("Europe/Paris"))
+    run_date = datetime.datetime.now().strftime(f"%Y-%m-%d {config["homework_check"]["repetitive_update_end"]}:00:01")
     scheduler.add_job(
         reload_scheduler,
         "date",
-        run_date=config["homework_check"]["repetitive_update_end"],
+        run_date=run_date,
         timezone=pytz.timezone("Europe/Paris"))
     scheduler.start()
 
@@ -151,7 +152,9 @@ async def info_command(interaction: discord.Interaction):
 
 @bot.tree.command(name="homeworks", description="Met à jour les devoirs.")
 async def update_homeworks_command(interaction: discord.Interaction):
+    await interaction.response.send_message("Actualisation des devoirs en cours...")
     await update_homeworks(interaction.user.id)
+    await interaction.edit_original_response(content="Actualisation des devoirs réussie.")
 
 
 async def update_homeworks(users_id: list[int]|int|None=None):
@@ -193,6 +196,9 @@ async def update_homeworks(users_id: list[int]|int|None=None):
                     f"{homework.description}",
                     f"*{homework.date}*"])
                 thread_name = f"{homework.date}: Devoir de {homework.subject.name.capitalize()}"
+                # Vérifie que la matière est déjà chargée
+                if homework.subject.name not in loaded_homeworks_threads:
+                    loaded_homeworks_threads[homework.subject.name] = {}
                 # Vérifie si le salon existe déjà
                 if thread_description in loaded_homeworks_threads[homework.subject.name]:
                     # Exécuté si le salon existe déjà
@@ -227,6 +233,6 @@ async def update_homeworks(users_id: list[int]|int|None=None):
                     else:
                         mention_message = await generated_thread.thread.send("Élèves concernés:")
                         await mention_message.edit(content=f"Élèves concernés:\n<@{user_id}>")
-                    
+            store_homeworks_hash(user_id, [homework.description for homework in homeworks])        
 
 bot.run(os.environ["DISCORD_TOKEN"])

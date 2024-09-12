@@ -20,8 +20,8 @@
             "17:20:00",
             "18:15:00"
         ],
-        "repetitive_update_start": "18:15:00",
-        "repetitive_update_end": "22:15:00",
+        "repetitive_update_start": "18",
+        "repetitive_update_end": "22",
         "repetitive_update_steps": [
             "15",
             "45"
