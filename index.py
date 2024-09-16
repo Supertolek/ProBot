@@ -1,10 +1,11 @@
 import os
 import json
 import discord
-from discord import ForumChannel
+from discord import ForumChannel, user
 from discord.ext import commands
 import pronotepy
-from pronoteAPI_connection import connection_to_pronotepy, connection_with_qr_code
+from pronoteAPI_connection import connection_to_pronotepy
+from pronoteAPI_qrcode import connection_with_qr_code
 import datetime
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -83,7 +84,32 @@ async def link_command(interaction: discord.Interaction, image: discord.Attachme
     else:
         await original_response.edit(content=f"<@{interaction.user.id}>: Une erreur est survenue lors de la connexion.")
 
+@bot.tree.command(name="done", description="Valide ton travail.")
+async def validate_homework_command(interaction: discord.Interaction):
+    if isinstance(interaction.channel, discord.threads.Thread) and interaction.channel.parent and interaction.channel.parent_id in config["subjects"].values():
+        print(interaction.channel.parent.name)
+        homeworks = users[str(interaction.user.id)].homework(datetime.date.today())
+        thread_description = await interaction.channel.history(limit=1, oldest_first=True).__anext__()
+        for homework in homeworks:
+            homework_description = "\n".join([
+                f"**Devoir de {homework.subject.name.capitalize()}**",
+                f"{homework.description}",
+                f"*{homework.date}*"])
+            homework_description += f"\n{[
+                f"[{file.name}]({file.url})"
+                for file
+                in homework.files]}" if homework.files else ""
+            if thread_description.content == homework_description:
+                homework.set_done(not homework.done)
+                await interaction.response.send_message(f"Votre devoir a été {'' if homework.done else 'dé'}validé!", ephemeral=True)
+                break
+        if not interaction.response.is_done:
+            await interaction.response.send_message("Il semblerait que ce ne soit pas un de vos devoirs.", ephemeral=True)
+    else:
+        await interaction.response.send_message("Cette commande ne peut être utilisée que dans un salon décrivant un devoir.", ephemeral=True)
 
+
+@bot.tree.command(name="password-link", description="Relie ton compte pronote avec ton nom d'utilisateur et ton mot de passe.")
 async def _link_command_callback(interaction: discord.Interaction):
     class Popup(discord.ui.Modal, title="Connectez-vous à Pronote."):
         username = discord.ui.TextInput(label="Nom d'utilisateur",
@@ -115,13 +141,13 @@ async def _link_command_callback(interaction: discord.Interaction):
             if client is None:
                 button = discord.ui.Button(label="Réessayer",
                                            style=discord.ButtonStyle.primary)
-                button.callback = _link_command_callback
+                button.callback = print #_link_command_callback
                 view = discord.ui.View()
                 view.add_item(button)
                 await message.edit(
                     content="Identifiant ou Mot de passe incorrect.",
                     view=view)
-                await _link_command_callback(interaction)
+                # await _link_command_callback(interaction)
                 return
             else:
                 users[str(interaction.user.id)] = client
@@ -175,6 +201,7 @@ async def update_homeworks(users_id: list[int]|int|None=None):
     # Récupère les devoirs de pronote
     for user_id in generated_users_id:
         # Exécuté pour chaque utilisateur connecté
+        print("Updating homeworks for user " + str(user_id))
         client = users[str(user_id)]
         homeworks = client.homework(datetime.date.today())
         # Détecte si de nouveaux devoirs sont apparus
@@ -195,6 +222,16 @@ async def update_homeworks(users_id: list[int]|int|None=None):
                     f"**Devoir de {homework.subject.name.capitalize()}**",
                     f"{homework.description}",
                     f"*{homework.date}*"])
+                if len(thread_description) > 2000:
+                    description_overflow_length = len(thread_description) - 2003
+                    thread_description = "\n".join([
+                        f"**Devoir de {homework.subject.name.capitalize()}**",
+                        f"{homework.description[:-(description_overflow_length+1)]}...",
+                        f"*{homework.date}*"])
+                thread_files = f"{"\n".join([
+                    f"[{file.name}]({file.url})"
+                    for file
+                    in homework.files])}" if homework.files else ""
                 thread_name = f"{homework.date}: Devoir de {homework.subject.name.capitalize()}"
                 # Vérifie que la matière est déjà chargée
                 if homework.subject.name not in loaded_homeworks_threads:
@@ -233,6 +270,8 @@ async def update_homeworks(users_id: list[int]|int|None=None):
                     else:
                         mention_message = await generated_thread.thread.send("Élèves concernés:")
                         await mention_message.edit(content=f"Élèves concernés:\n<@{user_id}>")
+                    if thread_files:
+                        await generated_thread.thread.send(f"Fichiers:\n{thread_files}")
             store_homeworks_hash(user_id, [homework.description for homework in homeworks])        
 
 bot.run(os.environ["DISCORD_TOKEN"])

@@ -14,6 +14,7 @@ pillow-pil = "0.1dev"
 discord-py = "2.4.0"
 apscheduler = "3.10.4"
 pytz = "^2024.2"
+requests = "^2.32.3"
 
 
 [build-system]
